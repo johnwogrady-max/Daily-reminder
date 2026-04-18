@@ -1,0 +1,4 @@
+anthropic>=0.45.0
+google-auth>=2.35.0
+google-api-python-client>=2.150.0
+requests>=2.32.0

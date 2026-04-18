@@ -1,0 +1,41 @@
+name: Daily morning alert
+
+on:
+  schedule:
+    # GitHub Actions cron is UTC-only. Melbourne is UTC+11 during AEDT and
+    # UTC+10 during AEST, so we schedule both and gate inside the script
+    # using zoneinfo - only the one that aligns to 07:00 local actually runs.
+    - cron: '0 20 * * *'   # 07:00 AEDT (Oct-Apr)
+    - cron: '0 21 * * *'   # 07:00 AEST (Apr-Oct)
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Run even if local Melbourne hour is not 7'
+        type: boolean
+        default: true
+
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - run: pip install -r requirements.txt
+
+      - name: Send briefing
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
+          PUSHOVER_APP_TOKEN: ${{ secrets.PUSHOVER_APP_TOKEN }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GOOGLE_WEATHER_API_KEY: ${{ secrets.GOOGLE_WEATHER_API_KEY }}
+          FORCE_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.force && '1' || '0' }}
+        run: python scripts/daily_alert.py
