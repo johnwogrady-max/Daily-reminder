@@ -1,0 +1,47 @@
+name: Weather API smoke test
+
+on:
+  push:
+    paths:
+      - '.github/workflows/test-weather.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secret presence
+        env:
+          KEY: ${{ secrets.GOOGLE_WEATHER_API_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "secret_present=false" > secret-check.txt
+          else
+            echo "secret_present=true" > secret-check.txt
+            echo "key_length=${#KEY}" >> secret-check.txt
+          fi
+
+      - name: Call Google Maps Weather API (Melbourne CBD)
+        env:
+          KEY: ${{ secrets.GOOGLE_WEATHER_API_KEY }}
+        run: |
+          mkdir -p test-results
+          URL="https://weather.googleapis.com/v1/currentConditions:lookup?key=$KEY&location.latitude=-37.8136&location.longitude=144.9631"
+          HTTP_CODE=$(curl -s -o test-results/weather-response.json -w "%{http_code}" "$URL")
+          echo "http_status=$HTTP_CODE" > test-results/weather-meta.txt
+          echo "timestamp=$(date -u +%FT%TZ)" >> test-results/weather-meta.txt
+          cat secret-check.txt >> test-results/weather-meta.txt
+          rm secret-check.txt
+
+      - name: Commit result back to branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add test-results/
+          git commit -m 'chore: record weather API test result [skip ci]' || echo 'no changes'
+          git push
