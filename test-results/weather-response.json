@@ -1,5 +1,5 @@
 {
-  "currentTime": "2026-04-18T23:12:05.958604198Z",
+  "currentTime": "2026-04-19T00:28:39.473169145Z",
   "timeZone": {
     "id": "Australia/Melbourne"
   },
@@ -13,11 +13,11 @@
     "type": "CLOUDY"
   },
   "temperature": {
-    "degrees": 9.5,
+    "degrees": 12,
     "unit": "CELSIUS"
   },
   "feelsLikeTemperature": {
-    "degrees": 8.6,
+    "degrees": 12,
     "unit": "CELSIUS"
   },
   "dewPoint": {
@@ -25,14 +25,14 @@
     "unit": "CELSIUS"
   },
   "heatIndex": {
-    "degrees": 9.5,
+    "degrees": 12,
     "unit": "CELSIUS"
   },
   "windChill": {
-    "degrees": 8.6,
+    "degrees": 12,
     "unit": "CELSIUS"
   },
-  "relativeHumidity": 77,
+  "relativeHumidity": 66,
   "uvIndex": 0,
   "precipitation": {
     "probability": {
@@ -50,19 +50,19 @@
   },
   "thunderstormProbability": 0,
   "airPressure": {
-    "meanSeaLevelMillibars": 1023.66
+    "meanSeaLevelMillibars": 1023.52
   },
   "wind": {
     "direction": {
-      "degrees": 35,
-      "cardinal": "NORTHEAST"
+      "degrees": 34,
+      "cardinal": "NORTH_NORTHEAST"
     },
     "speed": {
-      "value": 8,
+      "value": 6,
       "unit": "KILOMETERS_PER_HOUR"
     },
     "gust": {
-      "value": 13,
+      "value": 14,
       "unit": "KILOMETERS_PER_HOUR"
     }
   },
@@ -73,7 +73,7 @@
   "cloudCover": 99,
   "currentConditionsHistory": {
     "temperatureChange": {
-      "degrees": -4,
+      "degrees": -2,
       "unit": "CELSIUS"
     },
     "maxTemperature": {
