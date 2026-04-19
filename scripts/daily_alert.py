@@ -93,13 +93,24 @@ def fetch_events(creds: Credentials) -> list[dict]:
     events: list[dict] = []
     for e in resp.get("items", []):
         start = e.get("start", {})
+        end = e.get("end", {})
         start_str = start.get("dateTime") or start.get("date") or ""
+        end_str = end.get("dateTime") or end.get("date") or ""
+        attendee_list = e.get("attendees") or []
+        attendee_names = [
+            a.get("displayName") or a.get("email", "").split("@")[0]
+            for a in attendee_list
+            if not a.get("self")
+        ]
         events.append(
             {
                 "summary": e.get("summary", "(no title)"),
                 "start": start_str,
+                "end": end_str,
                 "location": e.get("location", ""),
-                "attendees": len(e.get("attendees", []) or []),
+                "description": (e.get("description") or "")[:200],
+                "attendees": attendee_names,
+                "all_day": "date" in start and "dateTime" not in start,
             }
         )
     return events
@@ -124,20 +135,22 @@ def fetch_weather() -> dict:
     return {"current": cur.json(), "forecast": fc.json()}
 
 
-SYSTEM_PROMPT = """You write a single push notification for the user's 7am Melbourne briefing.
+SYSTEM_PROMPT = """You write a daily 7am push notification briefing for a busy professional in Melbourne.
 
 Hard rules:
-- TOTAL length <= 900 characters. No preamble, no sign-off.
-- Use exactly these four sections in this order, each on its own line(s):
+- TOTAL length <= 1000 characters. No preamble, no sign-off, no markdown.
+- Use exactly these four sections in order:
 
-    \u2614 YES/NO \u2014 one short sentence on umbrella, citing rain probability or mm.
-    \U0001F324 <temp \u00b0C now>, <condition>, H<high>\u00b0/L<low>\u00b0
-    \U0001F4E7 (<N> in 24h): up to 3 bullets, only what actually matters. Skip newsletters, receipts, promos.
-    \U0001F4C5 Week: up to 5 compressed lines like 'Mon 10am Standup', 'Wed 2pm Dentist'. Group same-day items if tight.
+\u2614 YES or NO \u2014 one sentence umbrella call, cite rain % or mm expected.
+\U0001F324 <temp now>\u00b0C, <condition>, H<high>\u00b0/L<low>\u00b0
 
-- If there are no meaningful emails, say '\U0001F4E7 (0): nothing needs action.'
-- If there are no upcoming events, say '\U0001F4C5 Week: clear.'
-- Prefer signal over completeness. Never hallucinate senders or meeting titles.
+\U0001F4E7 Emails (<N> in 24h):
+Be opinionated. Only flag emails that need a reply, a decision, or signal something important (e.g. from a boss, client, lawyer, bank, school). Name the sender and say in 5 words why it matters. Skip anything automated, transactional, or informational. If nothing needs action say 'nothing needs action'.
+
+\U0001F4C5 This week:
+List ALL events for the next 7 days. Format each as: <Day> <time> \u2014 <title> [with <names> if attendees] [@ <location> if set]. Use short day names (Mon, Tue etc). For all-day events omit the time. Group multiple events on the same day together. If no events say 'clear'.
+
+Never hallucinate senders, meeting titles, or attendees.
 """
 
 
