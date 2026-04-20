@@ -1,4 +1,4 @@
-"""Daily 7am Melbourne briefing: emails + weather + calendar -> Pushover.
+"""Daily 7am Melbourne briefing: emails + weather + calendar -> Telegram.
 
 Invoked by .github/workflows/daily-alert.yml. Reads secrets from env.
 """
@@ -200,25 +200,27 @@ def fetch_weather() -> dict:
     return {"current": cur.json(), "forecast": fc.json()}
 
 
-SYSTEM_PROMPT = """You write a daily 7am push notification briefing for a busy professional in Melbourne.
+SYSTEM_PROMPT = """You write a daily 7am briefing for a busy professional in Melbourne, delivered via Telegram.
 
-Hard rules:
-- TOTAL length <= 1000 characters. No preamble, no sign-off, no markdown.
+Rules:
+- No character limit. Use the space to be genuinely useful, not padded.
+- No markdown syntax (no *, _, #). Emoji for section headers only.
 - Use exactly these five sections in order:
 
-\u2614 <full phrase about umbrella>. Never just YES/NO. Examples: 'No rain expected today, leave umbrella at home.' or 'Rain likely 3-6pm (70%, 4mm), take umbrella.'
-\U0001F324 <temp now>\u00b0C, <condition>, H<high>\u00b0/L<low>\u00b0
+\u2614 <full sentence about umbrella>. Never just YES/NO. Be specific: cite rain probability, mm expected, and time window if relevant. E.g. 'No rain expected today, leave umbrella at home.' or 'Rain likely 3-6pm (70%, 4mm) - take umbrella.'
 
-\U0001F4E7 New (<N> in 24h):
-Be opinionated. Only flag emails that need a reply, a decision, or signal something important (boss, client, lawyer, bank, school, personal). Name the sender and say in ~6 words why it matters. Skip automated/transactional/newsletter. If nothing, say 'nothing needs action'.
+\U0001F324 <temp now>\u00b0C, <condition>. High <high>\u00b0 / Low <low>\u00b0. One sentence on what to wear or expect if notable (e.g. cold wind, humidity, strong UV).
 
-\u23F0 Follow up (<N>):
-Things from the last week still waiting on a reply from you (threads where the latest message is from someone else). Name sender, 5-word topic, days old. Skip anything that doesn't need a response. If nothing, say 'nothing pending'.
+\U0001F4E7 New emails (<N> in 24h):
+Only include emails that need a reply, a decision, or carry important news (from boss, client, lawyer, doctor, school, bank, close personal contact). For each: name the sender clearly, subject, and 1 sentence on what action is needed or why it matters. Skip anything automated, transactional, or newsletter. If nothing needs action, say so plainly.
+
+\u23F0 Follow up (<N> awaiting reply):
+Threads from the last week where someone is waiting on you. For each: sender name, topic, how many days ago, and what you likely need to do. Be direct - if it looks urgent flag it. If nothing is pending, say so.
 
 \U0001F4C5 This week:
-List ALL events for the next 7 days. Format each as: <Day> <time> \u2014 <title> [with <names>] [@ <location>]. Short day names (Mon, Tue). All-day events omit time. Group multiple same-day events together. If no events say 'clear'.
+List ALL events for the next 7 days, one per line. Format: <Day> <date> <time> - <title> [with <names> if relevant] [@ <location>]. Use short day names (Mon, Tue etc). For all-day events omit the time. If today has something starting within 2 hours, flag it prominently at the top of this section with a warning emoji. If no events, say clear.
 
-Never hallucinate senders, meeting titles, or attendees.
+Never hallucinate senders, meeting titles, attendees, or weather figures.
 """
 
 
@@ -251,14 +253,13 @@ def summarise(emails: dict, events: list[dict], wx: dict) -> str:
 
 
 def push(message: str) -> None:
+    token = env("TELEGRAM_BOT_TOKEN")
+    chat_id = env("TELEGRAM_CHAT_ID")
     r = requests.post(
-        "https://api.pushover.net/1/messages.json",
-        data={
-            "token": env("PUSHOVER_APP_TOKEN"),
-            "user": env("PUSHOVER_USER_KEY"),
-            "title": "Daily briefing",
-            "message": message,
-            "priority": 0,
+        f"https://api.telegram.org/bot{token}/sendMessage",
+        json={
+            "chat_id": chat_id,
+            "text": message,
         },
         timeout=20,
     )
