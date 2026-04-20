@@ -46,33 +46,98 @@ def google_credentials() -> Credentials:
     return creds
 
 
-def fetch_emails(creds: Credentials) -> list[dict]:
+def _message_meta(svc, msg_id: str) -> dict:
+    msg = (
+        svc.users()
+        .messages()
+        .get(
+            userId="me",
+            id=msg_id,
+            format="metadata",
+            metadataHeaders=["From", "Subject", "Date"],
+        )
+        .execute()
+    )
+    headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
+    return {
+        "from": headers.get("From", ""),
+        "subject": headers.get("Subject", ""),
+        "date": headers.get("Date", ""),
+        "snippet": msg.get("snippet", ""),
+        "unread": "UNREAD" in msg.get("labelIds", []),
+        "internal_ts": int(msg.get("internalDate", 0)),
+    }
+
+
+def fetch_emails(creds: Credentials) -> dict:
     svc = build("gmail", "v1", credentials=creds, cache_discovery=False)
-    q = "newer_than:1d in:inbox -category:promotions -category:social"
-    listing = svc.users().messages().list(userId="me", q=q, maxResults=30).execute()
-    out: list[dict] = []
-    for m in listing.get("messages", []):
-        msg = (
+    profile = svc.users().getProfile(userId="me").execute()
+    my_email = (profile.get("emailAddress") or "").lower()
+
+    recent_q = "newer_than:1d in:inbox -category:promotions -category:social"
+    recent_ids = (
+        svc.users()
+        .messages()
+        .list(userId="me", q=recent_q, maxResults=20)
+        .execute()
+        .get("messages", [])
+    )
+    recent = [_message_meta(svc, m["id"]) for m in recent_ids]
+
+    thread_q = (
+        "newer_than:7d older_than:1d in:inbox "
+        "-category:promotions -category:social"
+    )
+    thread_ids = (
+        svc.users()
+        .threads()
+        .list(userId="me", q=thread_q, maxResults=25)
+        .execute()
+        .get("threads", [])
+    )
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    follow_ups: list[dict] = []
+    for t in thread_ids:
+        thread = (
             svc.users()
-            .messages()
+            .threads()
             .get(
                 userId="me",
-                id=m["id"],
+                id=t["id"],
                 format="metadata",
                 metadataHeaders=["From", "Subject", "Date"],
             )
             .execute()
         )
-        headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
-        out.append(
+        msgs = thread.get("messages", [])
+        if not msgs:
+            continue
+        last = msgs[-1]
+        last_headers = {
+            h["name"]: h["value"]
+            for h in last.get("payload", {}).get("headers", [])
+        }
+        last_from = (last_headers.get("From") or "").lower()
+        if my_email and my_email in last_from:
+            continue
+        first_headers = {
+            h["name"]: h["value"]
+            for h in msgs[0].get("payload", {}).get("headers", [])
+        }
+        last_ts = int(last.get("internalDate", 0))
+        age_days = max(0, (now_ms - last_ts) // (1000 * 60 * 60 * 24))
+        follow_ups.append(
             {
-                "from": headers.get("From", ""),
-                "subject": headers.get("Subject", ""),
-                "snippet": msg.get("snippet", ""),
-                "unread": "UNREAD" in msg.get("labelIds", []),
+                "from": last_headers.get("From", ""),
+                "subject": first_headers.get("Subject", ""),
+                "snippet": last.get("snippet", ""),
+                "age_days": int(age_days),
+                "thread_length": len(msgs),
+                "unread": "UNREAD" in last.get("labelIds", []),
             }
         )
-    return out
+
+    return {"recent": recent, "follow_ups": follow_ups}
 
 
 def fetch_events(creds: Credentials) -> list[dict]:
@@ -139,27 +204,31 @@ SYSTEM_PROMPT = """You write a daily 7am push notification briefing for a busy p
 
 Hard rules:
 - TOTAL length <= 1000 characters. No preamble, no sign-off, no markdown.
-- Use exactly these four sections in order:
+- Use exactly these five sections in order:
 
-\u2614 YES or NO \u2014 one sentence umbrella call, cite rain % or mm expected.
+\u2614 <full phrase about umbrella>. Never just YES/NO. Examples: 'No rain expected today, leave umbrella at home.' or 'Rain likely 3-6pm (70%, 4mm), take umbrella.'
 \U0001F324 <temp now>\u00b0C, <condition>, H<high>\u00b0/L<low>\u00b0
 
-\U0001F4E7 Emails (<N> in 24h):
-Be opinionated. Only flag emails that need a reply, a decision, or signal something important (e.g. from a boss, client, lawyer, bank, school). Name the sender and say in 5 words why it matters. Skip anything automated, transactional, or informational. If nothing needs action say 'nothing needs action'.
+\U0001F4E7 New (<N> in 24h):
+Be opinionated. Only flag emails that need a reply, a decision, or signal something important (boss, client, lawyer, bank, school, personal). Name the sender and say in ~6 words why it matters. Skip automated/transactional/newsletter. If nothing, say 'nothing needs action'.
+
+\u23F0 Follow up (<N>):
+Things from the last week still waiting on a reply from you (threads where the latest message is from someone else). Name sender, 5-word topic, days old. Skip anything that doesn't need a response. If nothing, say 'nothing pending'.
 
 \U0001F4C5 This week:
-List ALL events for the next 7 days. Format each as: <Day> <time> \u2014 <title> [with <names> if attendees] [@ <location> if set]. Use short day names (Mon, Tue etc). For all-day events omit the time. Group multiple events on the same day together. If no events say 'clear'.
+List ALL events for the next 7 days. Format each as: <Day> <time> \u2014 <title> [with <names>] [@ <location>]. Short day names (Mon, Tue). All-day events omit time. Group multiple same-day events together. If no events say 'clear'.
 
 Never hallucinate senders, meeting titles, or attendees.
 """
 
 
-def summarise(emails: list[dict], events: list[dict], wx: dict) -> str:
+def summarise(emails: dict, events: list[dict], wx: dict) -> str:
     client = Anthropic(api_key=env("ANTHROPIC_API_KEY"))
     user_payload = {
         "today_melbourne": datetime.now(MELBOURNE).strftime("%A %d %b %Y"),
         "weather": wx,
-        "emails": emails,
+        "emails_last_24h": emails.get("recent", []),
+        "threads_waiting_on_reply": emails.get("follow_ups", []),
         "events": events,
     }
     resp = client.messages.create(
