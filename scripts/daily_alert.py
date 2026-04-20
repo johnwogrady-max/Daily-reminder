@@ -143,41 +143,56 @@ def fetch_emails(creds: Credentials) -> dict:
 def fetch_events(creds: Credentials) -> list[dict]:
     svc = build("calendar", "v3", credentials=creds, cache_discovery=False)
     now = datetime.now(timezone.utc)
-    resp = (
-        svc.events()
-        .list(
-            calendarId="primary",
-            timeMin=now.isoformat(),
-            timeMax=(now + timedelta(days=7)).isoformat(),
-            singleEvents=True,
-            orderBy="startTime",
-            maxResults=40,
-        )
-        .execute()
-    )
+    time_min = now.isoformat()
+    time_max = (now + timedelta(days=7)).isoformat()
+
+    cal_list = svc.calendarList().list(minAccessRole="reader").execute()
+    calendars = [
+        c for c in cal_list.get("items", [])
+        if c.get("selected", False) and not c.get("deleted", False)
+    ]
+
     events: list[dict] = []
-    for e in resp.get("items", []):
-        start = e.get("start", {})
-        end = e.get("end", {})
-        start_str = start.get("dateTime") or start.get("date") or ""
-        end_str = end.get("dateTime") or end.get("date") or ""
-        attendee_list = e.get("attendees") or []
-        attendee_names = [
-            a.get("displayName") or a.get("email", "").split("@")[0]
-            for a in attendee_list
-            if not a.get("self")
-        ]
-        events.append(
-            {
-                "summary": e.get("summary", "(no title)"),
-                "start": start_str,
-                "end": end_str,
-                "location": e.get("location", ""),
-                "description": (e.get("description") or "")[:200],
-                "attendees": attendee_names,
-                "all_day": "date" in start and "dateTime" not in start,
-            }
+    for cal in calendars:
+        cal_id = cal["id"]
+        cal_name = cal.get("summaryOverride") or cal.get("summary") or cal_id
+        resp = (
+            svc.events()
+            .list(
+                calendarId=cal_id,
+                timeMin=time_min,
+                timeMax=time_max,
+                singleEvents=True,
+                orderBy="startTime",
+                maxResults=40,
+            )
+            .execute()
         )
+        for e in resp.get("items", []):
+            start = e.get("start", {})
+            end = e.get("end", {})
+            start_str = start.get("dateTime") or start.get("date") or ""
+            end_str = end.get("dateTime") or end.get("date") or ""
+            attendee_list = e.get("attendees") or []
+            attendee_names = [
+                a.get("displayName") or a.get("email", "").split("@")[0]
+                for a in attendee_list
+                if not a.get("self")
+            ]
+            events.append(
+                {
+                    "calendar": cal_name,
+                    "summary": e.get("summary", "(no title)"),
+                    "start": start_str,
+                    "end": end_str,
+                    "location": e.get("location", ""),
+                    "description": (e.get("description") or "")[:200],
+                    "attendees": attendee_names,
+                    "all_day": "date" in start and "dateTime" not in start,
+                }
+            )
+
+    events.sort(key=lambda x: x["start"])
     return events
 
 
