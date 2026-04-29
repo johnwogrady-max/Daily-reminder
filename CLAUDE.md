@@ -11,7 +11,7 @@ A single-purpose GitHub Actions cron job that sends a 7am Melbourne daily briefi
 The pipeline is linear and runs once per invocation:
 
 1. `google_credentials()` mints a fresh access token from a long-lived `GOOGLE_REFRESH_TOKEN` (scopes: `gmail.readonly`, `calendar.readonly`).
-2. `fetch_emails()` makes two Gmail queries: recent inbox (last 24h, excluding promotions/social) and follow-up threads (1–7d old where the last message is *not* from the user — used for the "awaiting reply" section).
+2. `fetch_emails()` makes three Gmail queries: (a) `in:sent newer_than:1d` to collect thread IDs the user has already replied in, (b) recent inbox (last 24h, excluding promotions/social) with those replied-in threads filtered out, and (c) follow-up threads (1–7d old where the last message does *not* carry the `SENT` label — used for the "awaiting reply" section). The `SENT` label check is deliberate: From-header matching missed replies sent from aliases / send-as addresses.
 3. `fetch_events()` enumerates **every selected, non-deleted calendar** the user has reader access to, then merges 7 days of events sorted by start time. Do not collapse this back to `primary` — that was a deliberate fix (commit `764526d`).
 4. `fetch_weather()` calls Google Maps Weather API (`weather.googleapis.com/v1`) for current conditions + 12h forecast at hardcoded Melbourne CBD lat/lon (`-37.8136, 144.9631`).
 5. `summarise()` sends everything to Claude (`claude-opus-4-7`, `max_tokens=16000`, `thinking={"type": "adaptive"}`) using `SYSTEM_PROMPT` which strictly defines five sections (umbrella / weather / new emails / follow up / this week) with **no markdown** — Telegram receives plain text + emoji headers only.

@@ -71,8 +71,17 @@ def _message_meta(svc, msg_id: str) -> dict:
 
 def fetch_emails(creds: Credentials) -> dict:
     svc = build("gmail", "v1", credentials=creds, cache_discovery=False)
-    profile = svc.users().getProfile(userId="me").execute()
-    my_email = (profile.get("emailAddress") or "").lower()
+
+    # Threads we've already replied in within the last 24h are "handled" —
+    # don't surface inbound messages from those threads as needing action.
+    sent_recent = (
+        svc.users()
+        .messages()
+        .list(userId="me", q="in:sent newer_than:1d", maxResults=100)
+        .execute()
+        .get("messages", [])
+    )
+    replied_thread_ids = {m["threadId"] for m in sent_recent}
 
     recent_q = "newer_than:1d in:inbox -category:promotions -category:social"
     recent_ids = (
@@ -82,7 +91,11 @@ def fetch_emails(creds: Credentials) -> dict:
         .execute()
         .get("messages", [])
     )
-    recent = [_message_meta(svc, m["id"]) for m in recent_ids]
+    recent = [
+        _message_meta(svc, m["id"])
+        for m in recent_ids
+        if m["threadId"] not in replied_thread_ids
+    ]
 
     thread_q = (
         "newer_than:7d older_than:1d in:inbox "
@@ -113,13 +126,14 @@ def fetch_emails(creds: Credentials) -> dict:
         if not msgs:
             continue
         last = msgs[-1]
+        # SENT label is reliable across aliases / send-as; From-header
+        # matching missed those.
+        if "SENT" in last.get("labelIds", []):
+            continue
         last_headers = {
             h["name"]: h["value"]
             for h in last.get("payload", {}).get("headers", [])
         }
-        last_from = (last_headers.get("From") or "").lower()
-        if my_email and my_email in last_from:
-            continue
         first_headers = {
             h["name"]: h["value"]
             for h in msgs[0].get("payload", {}).get("headers", [])
