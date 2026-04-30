@@ -111,3 +111,20 @@ code {
   border-radius: 4px;
   font-size: 12px;
 }
+
+input[type="password"] {
+  width: 100%;
+  background: #0a1422;
+  color: var(--text);
+  border: 1px solid #2a3a55;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+#pat-status {
+  display: inline-block;
+  margin-left: 8px;
+  vertical-align: middle;
+}

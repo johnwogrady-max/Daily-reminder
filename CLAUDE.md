@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A GitHub Actions cron job that, at 7am Melbourne, builds a daily briefing from Gmail + Calendar + Weather, runs it through Claude, and delivers it via two channels: a **Telegram message** (legacy, optional) and an **iOS PWA** at `https://johnwogrady-max.github.io/Daily-reminder/` (preferred). The pipeline lives in `scripts/daily_alert.py`, the push sender in `scripts/send_push.js`, the PWA shell in `docs/`, all wired together by `.github/workflows/daily-alert.yml`. There is no application server, no test suite beyond a weather API smoke test, and no build step.
+A GitHub Actions cron job that, at 7am Melbourne, builds a daily briefing from Gmail + Calendar + Weather, runs it through Claude, and delivers it as an end-to-end encrypted web push to an iOS PWA at `https://johnwogrady-max.github.io/Daily-reminder/`. The pipeline lives in `scripts/daily_alert.py`, the push sender in `scripts/send_push.js`, the PWA shell in `docs/`, all wired together by `.github/workflows/daily-alert.yml`. There is no application server, no test suite beyond a weather API smoke test, and no build step.
 
 ## Architecture (the parts that span files)
 
@@ -14,11 +14,10 @@ The pipeline is linear and runs once per invocation:
 2. `fetch_emails()` makes three Gmail queries: (a) `in:sent newer_than:1d` to collect thread IDs the user has already replied in, (b) recent inbox (last 24h, excluding promotions/social) with those replied-in threads filtered out, and (c) follow-up threads (1–7d old where the last message does *not* carry the `SENT` label — used for the "awaiting reply" section). The `SENT` label check is deliberate: From-header matching missed replies sent from aliases / send-as addresses.
 3. `fetch_events()` enumerates **every selected, non-deleted calendar** the user has reader access to, then merges 7 days of events sorted by start time. Do not collapse this back to `primary` — that was a deliberate fix (commit `764526d`).
 4. `fetch_weather()` calls Google Maps Weather API (`weather.googleapis.com/v1`) for current conditions + 12h forecast at hardcoded Melbourne CBD lat/lon (`-37.8136, 144.9631`).
-5. `summarise()` sends everything to Claude (`claude-opus-4-7`, `max_tokens=16000`, `thinking={"type": "adaptive"}`) using `SYSTEM_PROMPT` which strictly defines five sections (umbrella / weather / new emails / follow up / this week) with **no markdown** — both Telegram and the PWA render plain text + emoji headers only.
+5. `summarise()` sends everything to Claude (`claude-opus-4-7`, `max_tokens=16000`, `thinking={"type": "adaptive"}`) using `SYSTEM_PROMPT` which strictly defines five sections (umbrella / weather / new emails / follow up / this week) with **no markdown** — the PWA renders plain text + emoji headers only.
 6. `write_briefing_json()` writes `{generated_at, headline, body}` to `_briefing.json` at the repo root (gitignored). This file holds the real briefing for the next step and is **never committed** — the public repo only ever sees the static placeholder at `docs/briefing.json`.
-7. `push()` POSTs to Telegram if `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` are set; silently no-ops if not, so dropping Telegram is just a matter of removing the secrets.
-8. The workflow then runs `scripts/send_push.js`, which reads `_briefing.json`, packs the full body into the encrypted web-push payload (truncated to ~2.8 KB to stay under the ~4 KB ciphertext limit), and ships it to the iPhone via the `web-push` npm package + VAPID keys. It exits 0 on `404`/`410` (subscription gone) so a stale subscription doesn't fail the run.
-9. The service worker on the iPhone receives the encrypted push, stashes the full body in the Cache API at `./cached-briefing.json`, and shows a notification with just the headline. The PWA reads from that local cache when opened — the public site only serves a placeholder.
+7. The workflow then runs `scripts/send_push.js`, which reads `_briefing.json`, packs the full body into the encrypted web-push payload (truncated to ~2.8 KB to stay under the ~4 KB ciphertext limit), and ships it to the iPhone via the `web-push` npm package + VAPID keys. It exits 0 on `404`/`410` (subscription gone) so a stale subscription doesn't fail the run.
+8. The service worker on the iPhone receives the encrypted push, stashes the full body in the Cache API at `./cached-briefing.json`, and shows a notification with just the headline. The PWA reads from that local cache when opened — the public site only serves a placeholder.
 
 ### Cron-hour gating (don't "simplify" this)
 
@@ -57,7 +56,7 @@ pip install -r requirements.txt
 # Run the briefing locally — requires ALL secrets in env, plus FORCE_RUN
 # unless it's actually 7am in Melbourne
 FORCE_RUN=1 \
-ANTHROPIC_API_KEY=... TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... \
+ANTHROPIC_API_KEY=... \
 GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... GOOGLE_REFRESH_TOKEN=... \
 GOOGLE_WEATHER_API_KEY=... \
 python scripts/daily_alert.py
@@ -76,12 +75,11 @@ There is no linter, type-checker, or unit-test runner configured. The only autom
 
 **Always required**: `ANTHROPIC_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_WEATHER_API_KEY`. `env()` exits with code 1 on the first missing one.
 
-**Optional / channel-specific**: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` (Telegram delivery — skip silently if absent); `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` + `PUSH_SUBSCRIPTION` (web push to the PWA — skip silently if `PUSH_SUBSCRIPTION` is absent); `VAPID_SUBJECT` (defaults to a placeholder mailto).
+**Push delivery**: `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` + `PUSH_SUBSCRIPTION` (web push to the PWA — skip silently if `PUSH_SUBSCRIPTION` is absent); `VAPID_SUBJECT` (defaults to a placeholder mailto).
 
 ## Conventions worth knowing
 
-- **Two delivery channels, both optional.** Telegram and PWA web push are independent; either, both, or neither can be configured.
-- **No markdown in the briefing output.** The prompt forbids `*`, `_`, `#`. Emoji are used as section headers. Both Telegram and the PWA's `<pre>` rely on this.
+- **No markdown in the briefing output.** The prompt forbids `*`, `_`, `#`. Emoji are used as section headers. The PWA's `<pre>` relies on this.
 - **The headline is the umbrella line.** `headline()` extracts the first non-empty line of the briefing; that's the ~200-char string that appears in the iOS notification. Keep the umbrella section first in `SYSTEM_PROMPT`.
 - **`docs/briefing.json` is a static placeholder, never updated by the workflow.** The real body is delivered only via the encrypted push payload. Don't reintroduce a step that writes real content to it. If you rename the field shape (`generated_at`, `headline`, `body`), update `docs/app.js` and `docs/service-worker.js` together.
 - **The workflow has `permissions: contents: read`.** Don't add `contents: write` unless you are reintroducing a commit-back step (which would defeat the privacy model).

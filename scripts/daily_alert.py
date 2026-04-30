@@ -1,8 +1,9 @@
-"""Daily 7am Melbourne briefing: emails + weather + calendar -> Telegram + PWA.
+"""Daily 7am Melbourne briefing: emails + weather + calendar -> iOS PWA.
 
 Invoked by .github/workflows/daily-alert.yml. Reads secrets from env.
-Also writes docs/briefing.json which is served by GitHub Pages and
-consumed by the iOS PWA.
+Writes the briefing to a gitignored temp file (_briefing.json at repo
+root); the workflow's web-push step reads it and ships the body to the
+iPhone inside an end-to-end encrypted push payload.
 """
 
 from __future__ import annotations
@@ -311,24 +312,6 @@ def write_briefing_json(message: str) -> None:
     BRIEFING_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
-def push(message: str) -> None:
-    """Send the briefing to Telegram. No-op if Telegram secrets aren't set."""
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-    if not token or not chat_id:
-        print("Telegram not configured; skipping.")
-        return
-    r = requests.post(
-        f"https://api.telegram.org/bot{token}/sendMessage",
-        json={
-            "chat_id": chat_id,
-            "text": message,
-        },
-        timeout=20,
-    )
-    r.raise_for_status()
-
-
 def main() -> int:
     local_hour = datetime.now(MELBOURNE).hour
     force = os.environ.get("FORCE_RUN") == "1"
@@ -344,8 +327,8 @@ def main() -> int:
     if not message:
         message = "(Claude returned empty output. Check workflow logs.)"
     write_briefing_json(message)
-    push(message)
-    # Surface headline to the workflow for the web-push step.
+    # Surface a flag to the workflow so the web-push step only runs when we
+    # actually produced a fresh briefing.
     out = os.environ.get("GITHUB_OUTPUT")
     if out:
         with open(out, "a", encoding="utf-8") as f:
