@@ -1,14 +1,21 @@
-"""Daily 7am Melbourne briefing: emails + weather + calendar -> Telegram.
+"""Daily 7am Melbourne briefing: emails + weather + calendar -> Telegram + PWA.
 
 Invoked by .github/workflows/daily-alert.yml. Reads secrets from env.
+Also writes docs/briefing.json which is served by GitHub Pages and
+consumed by the iOS PWA.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+BRIEFING_PATH = REPO_ROOT / "docs" / "briefing.json"
 
 import requests
 from anthropic import Anthropic
@@ -282,9 +289,32 @@ def summarise(emails: dict, events: list[dict], wx: dict) -> str:
     return "\n".join(p.strip() for p in parts if p.strip()).strip()
 
 
+def headline(message: str) -> str:
+    """First non-empty line of the briefing — used as the push notification body."""
+    for line in message.splitlines():
+        line = line.strip()
+        if line:
+            return line[:200]
+    return "Today's briefing is ready."
+
+
+def write_briefing_json(message: str) -> None:
+    BRIEFING_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "generated_at": datetime.now(MELBOURNE).isoformat(timespec="seconds"),
+        "headline": headline(message),
+        "body": message,
+    }
+    BRIEFING_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+
+
 def push(message: str) -> None:
-    token = env("TELEGRAM_BOT_TOKEN")
-    chat_id = env("TELEGRAM_CHAT_ID")
+    """Send the briefing to Telegram. No-op if Telegram secrets aren't set."""
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        print("Telegram not configured; skipping.")
+        return
     r = requests.post(
         f"https://api.telegram.org/bot{token}/sendMessage",
         json={
@@ -310,8 +340,14 @@ def main() -> int:
     message = summarise(emails, events, wx)
     if not message:
         message = "(Claude returned empty output. Check workflow logs.)"
+    write_briefing_json(message)
     push(message)
-    print("Pushed briefing:")
+    # Surface headline to the workflow for the web-push step.
+    out = os.environ.get("GITHUB_OUTPUT")
+    if out:
+        with open(out, "a", encoding="utf-8") as f:
+            f.write("did_run=true\n")
+    print("Briefing generated:")
     print(message)
     return 0
 
