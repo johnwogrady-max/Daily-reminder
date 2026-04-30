@@ -1,0 +1,10 @@
+# The real briefing is written here by daily_alert.py and read by
+# send_push.js. It is NEVER committed to the public repo — the body
+# travels to the iPhone only inside the encrypted push payload.
+_briefing.json
+
+# Local OAuth client secret used by scripts/get_refresh_token.py.
+client_secret.json
+
+# Node deps when running the workflow steps locally.
+node_modules/

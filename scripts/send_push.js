@@ -1,16 +1,28 @@
 #!/usr/bin/env node
 /**
- * Send a web push to the iPhone PWA. Reads:
+ * Send the briefing as an end-to-end-encrypted web push to the iPhone PWA.
+ *
+ * The full briefing body travels inside the encrypted push payload — only
+ * the subscribed device can decrypt it. The service worker stashes the body
+ * in the local Cache API; the PWA reads from there. Nothing personal is
+ * ever published to the public Pages site.
+ *
+ * Reads:
  *   - VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (mailto:...)
  *   - PUSH_SUBSCRIPTION  (JSON the PWA gave you when you tapped Enable notifications)
- *   - docs/briefing.json (written by daily_alert.py earlier in the workflow)
+ *   - _briefing.json     (written by daily_alert.py earlier in the workflow,
+ *                         gitignored, never committed)
  *
- * No-op if PUSH_SUBSCRIPTION is missing — lets you set up the rest of the
- * pipeline before capturing the iPhone subscription.
+ * No-op if PUSH_SUBSCRIPTION is missing — lets the rest of the pipeline run
+ * before you've captured the iPhone subscription.
  */
 const fs = require("fs");
 const path = require("path");
 const webpush = require("web-push");
+
+// Web Push payload limit on most browsers/services is ~4 KB encrypted.
+// Plaintext should stay under ~3 KB to be safe.
+const MAX_BODY_BYTES = 2800;
 
 function envOrNull(name) {
   const v = process.env[name];
@@ -24,6 +36,17 @@ function envOrDie(name) {
     process.exit(1);
   }
   return v;
+}
+
+function truncateUtf8(text, maxBytes) {
+  if (Buffer.byteLength(text, "utf8") <= maxBytes) return text;
+  const suffix = "\n\n[Briefing truncated — open the app for the full version]";
+  const budget = maxBytes - Buffer.byteLength(suffix, "utf8");
+  let out = text;
+  while (Buffer.byteLength(out, "utf8") > budget) {
+    out = out.slice(0, -16);
+  }
+  return out + suffix;
 }
 
 function main() {
@@ -45,22 +68,27 @@ function main() {
     process.exit(1);
   }
 
-  const briefingPath = path.join(__dirname, "..", "docs", "briefing.json");
+  const briefingPath = path.join(__dirname, "..", "_briefing.json");
   let briefing;
   try {
     briefing = JSON.parse(fs.readFileSync(briefingPath, "utf-8"));
   } catch (e) {
-    console.error("ERROR: could not read docs/briefing.json.", e.message);
+    console.error("ERROR: could not read _briefing.json.", e.message);
     process.exit(1);
   }
 
   webpush.setVapidDetails(subject, publicKey, privateKey);
 
+  const body = truncateUtf8(briefing.body || "", MAX_BODY_BYTES);
   const payload = JSON.stringify({
     title: "Daily Briefing",
-    body: briefing.headline || "Today's briefing is ready.",
+    headline: briefing.headline || "Today's briefing is ready.",
+    body,
+    generated_at: briefing.generated_at,
     url: "./",
   });
+
+  console.log(`Push payload size: ${Buffer.byteLength(payload, "utf8")} bytes`);
 
   webpush
     .sendNotification(subscription, payload, { TTL: 60 * 60 * 6 })
@@ -69,8 +97,6 @@ function main() {
     })
     .catch((err) => {
       console.error("Push failed:", err.statusCode, err.body || err.message);
-      // 404 / 410 means the subscription is dead — surface but don't fail
-      // the whole workflow over it.
       if (err.statusCode === 404 || err.statusCode === 410) {
         console.error("Subscription is gone. Re-capture from the PWA and update PUSH_SUBSCRIPTION.");
         return;

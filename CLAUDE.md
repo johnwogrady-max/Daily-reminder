@@ -15,10 +15,10 @@ The pipeline is linear and runs once per invocation:
 3. `fetch_events()` enumerates **every selected, non-deleted calendar** the user has reader access to, then merges 7 days of events sorted by start time. Do not collapse this back to `primary` — that was a deliberate fix (commit `764526d`).
 4. `fetch_weather()` calls Google Maps Weather API (`weather.googleapis.com/v1`) for current conditions + 12h forecast at hardcoded Melbourne CBD lat/lon (`-37.8136, 144.9631`).
 5. `summarise()` sends everything to Claude (`claude-opus-4-7`, `max_tokens=16000`, `thinking={"type": "adaptive"}`) using `SYSTEM_PROMPT` which strictly defines five sections (umbrella / weather / new emails / follow up / this week) with **no markdown** — both Telegram and the PWA render plain text + emoji headers only.
-6. `write_briefing_json()` writes `{generated_at, headline, body}` to `docs/briefing.json`. The headline is the first non-empty line of the briefing (the umbrella verdict) and is what the iPhone push notification displays.
+6. `write_briefing_json()` writes `{generated_at, headline, body}` to `_briefing.json` at the repo root (gitignored). This file holds the real briefing for the next step and is **never committed** — the public repo only ever sees the static placeholder at `docs/briefing.json`.
 7. `push()` POSTs to Telegram if `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` are set; silently no-ops if not, so dropping Telegram is just a matter of removing the secrets.
-8. The workflow then runs `scripts/send_push.js`, which uses the `web-push` npm package and the VAPID key pair to deliver the headline as a web-push notification to the PWA on the iPhone. It exits 0 on `404`/`410` (subscription gone) so a stale subscription doesn't fail the run.
-9. The workflow commits `docs/briefing.json` back to `main` with `[skip ci]`, so the next time the PWA opens it pulls the fresh JSON via GitHub Pages.
+8. The workflow then runs `scripts/send_push.js`, which reads `_briefing.json`, packs the full body into the encrypted web-push payload (truncated to ~2.8 KB to stay under the ~4 KB ciphertext limit), and ships it to the iPhone via the `web-push` npm package + VAPID keys. It exits 0 on `404`/`410` (subscription gone) so a stale subscription doesn't fail the run.
+9. The service worker on the iPhone receives the encrypted push, stashes the full body in the Cache API at `./cached-briefing.json`, and shows a notification with just the headline. The PWA reads from that local cache when opened — the public site only serves a placeholder.
 
 ### Cron-hour gating (don't "simplify" this)
 
@@ -37,6 +37,16 @@ The iOS PWA needs three things wired before it works end-to-end:
 3. A `PUSH_SUBSCRIPTION` GitHub secret containing the JSON object the PWA produces when the user taps "Enable notifications" on the installed iOS PWA. iOS requires the PWA be installed via Add to Home Screen *before* push permission can be granted; permission requested in Safari proper is silently denied.
 
 GitHub Pages must be enabled for the `/docs` folder of `main` (Settings → Pages). The PWA URL is `https://<owner>.github.io/<repo>/`.
+
+### Privacy model
+
+The repo can be public without leaking briefing content. The real body never lives on the public site:
+
+- `_briefing.json` (gitignored) is written by Python, read by the Node push step, and discarded with the runner.
+- Web-push payloads are end-to-end encrypted between the workflow and the subscribed device — push services (Apple, Google, Mozilla) cannot decrypt them.
+- The service worker is the only place the body is decrypted; it stashes a copy in the device-local Cache API.
+- `docs/briefing.json` is a generic placeholder shown if the PWA is opened before any push has landed (or on a different device).
+- Notification preview on the lock screen shows the umbrella headline only. iOS Settings → Notifications → Briefing → Show Previews → "When Unlocked" hides even that until the phone is unlocked.
 
 ## Commands
 
@@ -70,10 +80,12 @@ There is no linter, type-checker, or unit-test runner configured. The only autom
 
 ## Conventions worth knowing
 
-- **Two delivery channels, both optional.** Telegram and PWA web push are independent; either, both, or neither can be configured. The JSON file is always written when the briefing runs, so the PWA shows it on next open even without push set up.
+- **Two delivery channels, both optional.** Telegram and PWA web push are independent; either, both, or neither can be configured.
 - **No markdown in the briefing output.** The prompt forbids `*`, `_`, `#`. Emoji are used as section headers. Both Telegram and the PWA's `<pre>` rely on this.
 - **The headline is the umbrella line.** `headline()` extracts the first non-empty line of the briefing; that's the ~200-char string that appears in the iOS notification. Keep the umbrella section first in `SYSTEM_PROMPT`.
-- **`docs/briefing.json` is committed back to `main`** by the workflow with `[skip ci]`. This is how GitHub Pages serves the latest briefing; do not move the file or rename the field shape (`generated_at`, `headline`, `body`) without updating `docs/app.js`.
-- **`did_run` output gates the push and commit steps.** `daily_alert.py` writes `did_run=true` to `GITHUB_OUTPUT` only when it actually generated a briefing (i.e. wasn't skipped by the hour gate). The workflow's `if:` conditions key off this — without it, an off-hour cron would re-push the previous day's headline.
+- **`docs/briefing.json` is a static placeholder, never updated by the workflow.** The real body is delivered only via the encrypted push payload. Don't reintroduce a step that writes real content to it. If you rename the field shape (`generated_at`, `headline`, `body`), update `docs/app.js` and `docs/service-worker.js` together.
+- **The workflow has `permissions: contents: read`.** Don't add `contents: write` unless you are reintroducing a commit-back step (which would defeat the privacy model).
+- **`did_run` output gates the push step.** `daily_alert.py` writes `did_run=true` to `GITHUB_OUTPUT` only when it actually generated a briefing (i.e. wasn't skipped by the hour gate). Without it, an off-hour cron would re-push the previous day's content.
+- **Push payload size limit ~4 KB encrypted.** `send_push.js` truncates the body at ~2.8 KB plaintext with an explanatory tail. If briefings start getting cut, either trim the prompt or shrink the truncation marker.
 - **Node 24 opt-in.** The workflow sets `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` to suppress Node 20 deprecation warnings (commit `089cb0b`). Keep it unless GitHub changes default runtimes.
 - **Don't hallucinate in the prompt.** `SYSTEM_PROMPT` ends with an explicit "Never hallucinate senders, meeting titles, attendees, or weather figures" — preserve this if you edit the prompt.
