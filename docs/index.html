@@ -31,10 +31,17 @@
         <textarea id="subscription" readonly rows="8"></textarea>
         <button id="copy-btn">Copy to clipboard</button>
       </div>
+
+      <h2 style="margin-top:20px">Run now</h2>
+      <p class="hint">Paste a GitHub fine-grained PAT with <strong>Actions: Write</strong> permission on this repo. It stays on this device only.</p>
+      <input id="pat-input" type="password" placeholder="github_pat_…" />
+      <button id="pat-save-btn">Save PAT</button>
+      <span id="pat-status" class="hint"></span>
     </section>
 
     <footer>
       <button id="refresh-btn">Refresh</button>
+      <button id="run-now-btn">Run now</button>
       <button id="setup-toggle">Setup</button>
     </footer>
   </main>
