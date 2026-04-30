@@ -16,15 +16,30 @@ async function registerSW() {
 async function loadBriefing() {
   const el = document.getElementById("briefing");
   const meta = document.getElementById("generated");
+
+  // The real briefing is delivered via encrypted web push and stashed in
+  // the local cache by the service worker. The public site hosts only a
+  // placeholder.
+  try {
+    const cached = await caches.match("./cached-briefing.json");
+    if (cached) {
+      const data = await cached.json();
+      el.textContent = (data.body || "").trim() || "No briefing yet.";
+      if (data.generated_at) {
+        meta.textContent = "Updated " + new Date(data.generated_at).toLocaleString();
+      }
+      return;
+    }
+  } catch (_) {
+    // fall through to placeholder
+  }
+
   try {
     const res = await fetch("./briefing.json?_=" + Date.now(), { cache: "no-cache" });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
     el.textContent = (data.body || "").trim() || "No briefing yet.";
-    if (data.generated_at) {
-      const d = new Date(data.generated_at);
-      meta.textContent = "Updated " + d.toLocaleString();
-    }
+    meta.textContent = "Waiting for the next 7am push.";
   } catch (e) {
     el.textContent = "Couldn't load briefing. " + e.message;
   }

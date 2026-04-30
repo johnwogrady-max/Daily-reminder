@@ -15,7 +15,10 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-BRIEFING_PATH = REPO_ROOT / "docs" / "briefing.json"
+# _briefing.json is gitignored — the real briefing never gets committed
+# back to the public repo. send_push.js reads it and ships the contents
+# inside the encrypted push payload to the iPhone PWA.
+BRIEFING_PATH = REPO_ROOT / "_briefing.json"
 
 import requests
 from anthropic import Anthropic
