@@ -1,6 +1,6 @@
 /* Service worker for the Daily Briefing PWA. */
 
-const CACHE = "briefing-v2";
+const CACHE = "briefing-v3";
 const BRIEFING_KEY = "./cached-briefing.json";
 const SHELL = [
   "./",
