@@ -1,5 +1,5 @@
 // Paste your VAPID public key here after running `npx web-push generate-vapid-keys`.
-const VAPID_PUBLIC_KEY = "PASTE_VAPID_PUBLIC_KEY_HERE";
+const VAPID_PUBLIC_KEY = "BEdVpuEowSmtY-4vciGaidhIUR44Lad1k2lzM-uwTacvM54ZTszzxLbswpyaJCRoKGC_fZIbySzTvS2tXM1h4y0";
 
 function urlBase64ToUint8Array(base64) {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
