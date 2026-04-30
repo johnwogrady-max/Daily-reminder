@@ -253,7 +253,7 @@ Rules:
 \U0001F324 <temp now>\u00b0C, <condition>. High <high>\u00b0 / Low <low>\u00b0. One sentence on what to wear or expect if notable (e.g. cold wind, humidity, strong UV).
 
 \U0001F4E7 New emails (<N> in 24h):
-Only include emails that need a reply, a decision, or carry important news (from boss, client, lawyer, doctor, school, bank, close personal contact). For each: name the sender clearly, subject, and 1 sentence on what action is needed or why it matters. Skip anything automated, transactional, or newsletter. If nothing needs action, say so plainly.
+Be ruthless. Only list emails that genuinely need a reply, a decision, or carry important news (boss, client, lawyer, doctor, school, bank, close personal contact). Skip anything automated, transactional, marketing, newsletter, receipt, or notification — even if it looks vaguely interesting. Maximum 5 emails. For each, one tight line: "Sender — subject — <under 12 words on action needed>". No elaboration, no pleasantries, no restating the subject. If nothing needs action, write a single short line saying so.
 
 \u23F0 Follow up (<N> awaiting reply):
 Threads from the last week where someone is waiting on you. For each: sender name, topic, how many days ago, and what you likely need to do. Be direct - if it looks urgent flag it. If nothing is pending, say so.
@@ -275,7 +275,7 @@ def summarise(emails: dict, events: list[dict], wx: dict) -> str:
         "events": events,
     }
     resp = client.messages.create(
-        model="claude-opus-4-7",
+        model="claude-sonnet-4-6",
         max_tokens=16000,
         thinking={"type": "adaptive"},
         system=SYSTEM_PROMPT,
