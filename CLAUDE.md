@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A single-purpose GitHub Actions cron job that sends a 7am Melbourne daily briefing to Telegram. The whole pipeline lives in `scripts/daily_alert.py` (~300 lines) and is invoked by `.github/workflows/daily-alert.yml`. There is no application server, no test suite beyond a weather API smoke test, and no build step.
+A GitHub Actions cron job that, at 7am Melbourne, builds a daily briefing from Gmail + Calendar + Weather, runs it through Claude, and delivers it via two channels: a **Telegram message** (legacy, optional) and an **iOS PWA** at `https://johnwogrady-max.github.io/Daily-reminder/` (preferred). The pipeline lives in `scripts/daily_alert.py`, the push sender in `scripts/send_push.js`, the PWA shell in `docs/`, all wired together by `.github/workflows/daily-alert.yml`. There is no application server, no test suite beyond a weather API smoke test, and no build step.
 
 ## Architecture (the parts that span files)
 
@@ -14,8 +14,11 @@ The pipeline is linear and runs once per invocation:
 2. `fetch_emails()` makes three Gmail queries: (a) `in:sent newer_than:1d` to collect thread IDs the user has already replied in, (b) recent inbox (last 24h, excluding promotions/social) with those replied-in threads filtered out, and (c) follow-up threads (1–7d old where the last message does *not* carry the `SENT` label — used for the "awaiting reply" section). The `SENT` label check is deliberate: From-header matching missed replies sent from aliases / send-as addresses.
 3. `fetch_events()` enumerates **every selected, non-deleted calendar** the user has reader access to, then merges 7 days of events sorted by start time. Do not collapse this back to `primary` — that was a deliberate fix (commit `764526d`).
 4. `fetch_weather()` calls Google Maps Weather API (`weather.googleapis.com/v1`) for current conditions + 12h forecast at hardcoded Melbourne CBD lat/lon (`-37.8136, 144.9631`).
-5. `summarise()` sends everything to Claude (`claude-opus-4-7`, `max_tokens=16000`, `thinking={"type": "adaptive"}`) using `SYSTEM_PROMPT` which strictly defines five sections (umbrella / weather / new emails / follow up / this week) with **no markdown** — Telegram receives plain text + emoji headers only.
-6. `push()` POSTs to the Telegram Bot API.
+5. `summarise()` sends everything to Claude (`claude-opus-4-7`, `max_tokens=16000`, `thinking={"type": "adaptive"}`) using `SYSTEM_PROMPT` which strictly defines five sections (umbrella / weather / new emails / follow up / this week) with **no markdown** — both Telegram and the PWA render plain text + emoji headers only.
+6. `write_briefing_json()` writes `{generated_at, headline, body}` to `docs/briefing.json`. The headline is the first non-empty line of the briefing (the umbrella verdict) and is what the iPhone push notification displays.
+7. `push()` POSTs to Telegram if `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` are set; silently no-ops if not, so dropping Telegram is just a matter of removing the secrets.
+8. The workflow then runs `scripts/send_push.js`, which uses the `web-push` npm package and the VAPID key pair to deliver the headline as a web-push notification to the PWA on the iPhone. It exits 0 on `404`/`410` (subscription gone) so a stale subscription doesn't fail the run.
+9. The workflow commits `docs/briefing.json` back to `main` with `[skip ci]`, so the next time the PWA opens it pulls the fresh JSON via GitHub Pages.
 
 ### Cron-hour gating (don't "simplify" this)
 
@@ -24,6 +27,16 @@ GitHub Actions cron is UTC-only, but Melbourne switches between AEDT (UTC+11) an
 ### Refresh token bootstrap
 
 `scripts/get_refresh_token.py` is a **one-time local helper**, not part of the runtime path. It runs `InstalledAppFlow` against a `client_secret.json` (Desktop OAuth client, gitignored) and prints the three Google secrets to paste into GitHub Actions. Never run this in CI.
+
+### PWA bootstrap (also one-time)
+
+The iOS PWA needs three things wired before it works end-to-end:
+
+1. A VAPID key pair generated locally with `npx web-push generate-vapid-keys` and stored as `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` GitHub secrets. Optional `VAPID_SUBJECT` (a `mailto:` URL) — defaults to `mailto:noreply@example.com`.
+2. The same `VAPID_PUBLIC_KEY` pasted into the `VAPID_PUBLIC_KEY` constant at the top of `docs/app.js`. The public key on the client must match the one signing the push.
+3. A `PUSH_SUBSCRIPTION` GitHub secret containing the JSON object the PWA produces when the user taps "Enable notifications" on the installed iOS PWA. iOS requires the PWA be installed via Add to Home Screen *before* push permission can be granted; permission requested in Safari proper is silently denied.
+
+GitHub Pages must be enabled for the `/docs` folder of `main` (Settings → Pages). The PWA URL is `https://<owner>.github.io/<repo>/`.
 
 ## Commands
 
@@ -51,11 +64,16 @@ There is no linter, type-checker, or unit-test runner configured. The only autom
 
 ## Required secrets (GitHub Actions)
 
-`ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_WEATHER_API_KEY`. `env()` exits with code 1 on the first missing one.
+**Always required**: `ANTHROPIC_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_WEATHER_API_KEY`. `env()` exits with code 1 on the first missing one.
+
+**Optional / channel-specific**: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` (Telegram delivery — skip silently if absent); `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` + `PUSH_SUBSCRIPTION` (web push to the PWA — skip silently if `PUSH_SUBSCRIPTION` is absent); `VAPID_SUBJECT` (defaults to a placeholder mailto).
 
 ## Conventions worth knowing
 
-- **Telegram, not Pushover.** Delivery was migrated (commit `0ea5813`); there is no character cap and `SYSTEM_PROMPT` explicitly tells Claude to use the space, not pad it.
-- **No markdown in the briefing output.** Telegram is sent as plain text; the prompt forbids `*`, `_`, `#`. Emoji are used as section headers.
+- **Two delivery channels, both optional.** Telegram and PWA web push are independent; either, both, or neither can be configured. The JSON file is always written when the briefing runs, so the PWA shows it on next open even without push set up.
+- **No markdown in the briefing output.** The prompt forbids `*`, `_`, `#`. Emoji are used as section headers. Both Telegram and the PWA's `<pre>` rely on this.
+- **The headline is the umbrella line.** `headline()` extracts the first non-empty line of the briefing; that's the ~200-char string that appears in the iOS notification. Keep the umbrella section first in `SYSTEM_PROMPT`.
+- **`docs/briefing.json` is committed back to `main`** by the workflow with `[skip ci]`. This is how GitHub Pages serves the latest briefing; do not move the file or rename the field shape (`generated_at`, `headline`, `body`) without updating `docs/app.js`.
+- **`did_run` output gates the push and commit steps.** `daily_alert.py` writes `did_run=true` to `GITHUB_OUTPUT` only when it actually generated a briefing (i.e. wasn't skipped by the hour gate). The workflow's `if:` conditions key off this — without it, an off-hour cron would re-push the previous day's headline.
 - **Node 24 opt-in.** The workflow sets `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` to suppress Node 20 deprecation warnings (commit `089cb0b`). Keep it unless GitHub changes default runtimes.
 - **Don't hallucinate in the prompt.** `SYSTEM_PROMPT` ends with an explicit "Never hallucinate senders, meeting titles, attendees, or weather figures" — preserve this if you edit the prompt.

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Briefing" />
+  <meta name="theme-color" content="#1976d2" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="icon" href="icon-192.png" />
+  <title>Daily Briefing</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Daily Briefing</h1>
+      <p id="generated" class="meta"></p>
+    </header>
+
+    <pre id="briefing">Loading…</pre>
+
+    <section id="setup" hidden>
+      <h2>Notifications</h2>
+      <p class="hint">Tap to receive your 7am briefing as a push notification.</p>
+      <button id="enable-btn">Enable notifications</button>
+      <div id="sub-wrap" hidden>
+        <p class="hint">Copy this and paste it into the <code>PUSH_SUBSCRIPTION</code> GitHub secret:</p>
+        <textarea id="subscription" readonly rows="8"></textarea>
+        <button id="copy-btn">Copy to clipboard</button>
+      </div>
+    </section>
+
+    <footer>
+      <button id="refresh-btn">Refresh</button>
+      <button id="setup-toggle">Setup</button>
+    </footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

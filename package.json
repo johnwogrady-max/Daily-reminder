@@ -1,0 +1,12 @@
+{
+  "name": "daily-reminder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Web-push sender for the daily briefing PWA.",
+  "scripts": {
+    "send-push": "node scripts/send_push.js"
+  },
+  "dependencies": {
+    "web-push": "^3.6.7"
+  }
+}

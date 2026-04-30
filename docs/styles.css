@@ -1,0 +1,113 @@
+:root {
+  --bg: #0d1b2a;
+  --panel: #14233a;
+  --text: #e8eef7;
+  --muted: #8aa0bd;
+  --accent: #4ea1ff;
+  --accent-text: #ffffff;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100%;
+}
+
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: max(env(safe-area-inset-top), 24px) 20px max(env(safe-area-inset-bottom), 24px);
+}
+
+header h1 {
+  font-size: 22px;
+  margin: 0 0 4px;
+  letter-spacing: 0.2px;
+}
+
+.meta {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+#briefing {
+  background: var(--panel);
+  border-radius: 14px;
+  padding: 18px 16px;
+  font: 15px/1.55 -apple-system, "SF Pro Text", system-ui, sans-serif;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  margin: 0;
+  min-height: 200px;
+}
+
+section {
+  margin-top: 28px;
+  padding: 16px;
+  background: var(--panel);
+  border-radius: 14px;
+}
+
+section h2 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+textarea {
+  width: 100%;
+  background: #0a1422;
+  color: var(--text);
+  border: 1px solid #2a3a55;
+  border-radius: 10px;
+  padding: 10px;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  resize: vertical;
+}
+
+button {
+  background: var(--accent);
+  color: var(--accent-text);
+  border: 0;
+  padding: 11px 18px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 8px;
+  margin-right: 8px;
+}
+
+button:active { opacity: 0.7; }
+
+footer {
+  margin-top: 32px;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+footer button {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid #2a3a55;
+}
+
+code {
+  background: #0a1422;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
