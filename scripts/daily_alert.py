@@ -275,7 +275,7 @@ def summarise(emails: dict, events: list[dict], wx: dict) -> str:
         "events": events,
     }
     resp = client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-haiku-4-5",
         max_tokens=16000,
         thinking={"type": "enabled", "budget_tokens": 2000},
         system=SYSTEM_PROMPT,
