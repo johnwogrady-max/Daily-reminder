@@ -28,8 +28,8 @@ entities:
     label: TCorp / SAS Trustee Corporation (~18%)
     names: ["TCorp", "NSW Treasury Corporation", "SAS Trustee Corporation", "State Super"]
   - key: morrison
-    label: Morrison / Utilities of Australia (~9%)
-    names: ["Morrison & Co", "Morrison", "HRL Morrison", "Utilities of Australia", "Infratil"]
+    label: Utilities of Australia, managed by Morrison (~9%)
+    names: ["Utilities of Australia", "Morrison & Co", "Morrison", "HRL Morrison"]
 
 # Always included and flagged, however minor.
 priority_topics:
@@ -65,7 +65,7 @@ news_queries:
   - '"IFM Investors"'
   - '"Future Fund" infrastructure OR airport'
   - 'TCorp OR "NSW Treasury Corporation"'
-  - '"Morrison & Co" OR Infratil'
+  - '"Utilities of Australia" OR "Morrison & Co"'
   - '"third runway" Melbourne'
   - '"airport rail" Melbourne OR "SRL Airport"'
   - 'ACCC airport monitoring OR "airports act"'
