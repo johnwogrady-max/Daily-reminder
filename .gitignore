@@ -12,3 +12,6 @@ client_secret.json
 
 # Node deps when running the workflow steps locally.
 node_modules/
+
+# Python bytecode.
+__pycache__/
