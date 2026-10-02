@@ -12,6 +12,9 @@
  *   - PUSH_SUBSCRIPTION  (JSON the PWA gave you when you tapped Enable notifications)
  *   - _briefing.json     (written by daily_alert.py earlier in the workflow,
  *                         gitignored, never committed)
+ *   - BRIEFING_FILE, PUSH_KIND, PUSH_TITLE (optional) — used by the APAC news
+ *     workflow to send _news.json as kind "news". Defaults are the morning
+ *     briefing.
  *
  * No-op if PUSH_SUBSCRIPTION is missing — lets the rest of the pipeline run
  * before you've captured the iPhone subscription.
@@ -68,12 +71,15 @@ function main() {
     process.exit(1);
   }
 
-  const briefingPath = path.join(__dirname, "..", "_briefing.json");
+  const briefingFile = envOrNull("BRIEFING_FILE") || "_briefing.json";
+  const kind = envOrNull("PUSH_KIND") || "daily";
+  const title = envOrNull("PUSH_TITLE") || "Daily Briefing";
+  const briefingPath = path.join(__dirname, "..", briefingFile);
   let briefing;
   try {
     briefing = JSON.parse(fs.readFileSync(briefingPath, "utf-8"));
   } catch (e) {
-    console.error("ERROR: could not read _briefing.json.", e.message);
+    console.error(`ERROR: could not read ${briefingFile}.`, e.message);
     process.exit(1);
   }
 
@@ -81,11 +87,12 @@ function main() {
 
   const body = truncateUtf8(briefing.body || "", MAX_BODY_BYTES);
   const payload = JSON.stringify({
-    title: "Daily Briefing",
+    title,
+    kind,
     headline: briefing.headline || "Today's briefing is ready.",
     body,
     generated_at: briefing.generated_at,
-    url: "./",
+    url: kind === "daily" ? "./" : `./?view=${kind}`,
   });
 
   console.log(`Push payload size: ${Buffer.byteLength(payload, "utf8")} bytes`);

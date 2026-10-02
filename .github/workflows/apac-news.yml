@@ -1,0 +1,83 @@
+name: APAC daily news
+
+on:
+  schedule:
+    # 08:00 Melbourne. Same two-cron daylight-saving pattern as
+    # daily-alert.yml; the script skips whichever isn't 8am locally.
+    - cron: '0 21 * * *'   # 08:00 AEDT (Oct-Apr)
+    - cron: '0 22 * * *'   # 08:00 AEST (Apr-Oct)
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Run even if local Melbourne hour is not 8'
+        type: boolean
+        default: true
+      dry_run:
+        description: 'Dry run: print collected items and briefing to the log, do not push'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  news:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: pip install -r requirements.txt
+
+      - run: npm install --no-save web-push@^3.6.7
+
+      # Fingerprints of items already reported, so stories aren't repeated.
+      # Kept in the Actions cache, never committed.
+      - name: Restore seen items
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/apac_seen.json
+          key: apac-seen-${{ github.run_id }}
+          restore-keys: apac-seen-
+
+      - name: Generate news briefing
+        id: news
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          NEWS_ALERT_FEEDS: ${{ secrets.NEWS_ALERT_FEEDS }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          FORCE_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.force && '1' || '0' }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+        run: python scripts/apac_news.py
+
+      - name: Save seen items
+        if: steps.news.outputs.did_run == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/apac_seen.json
+          key: apac-seen-${{ github.run_id }}
+
+      - name: Send web push to PWA
+        if: steps.news.outputs.did_run == 'true'
+        env:
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          PUSH_SUBSCRIPTION: ${{ secrets.PUSH_SUBSCRIPTION }}
+          BRIEFING_FILE: _news.json
+          PUSH_KIND: news
+          PUSH_TITLE: APAC daily
+        run: node scripts/send_push.js

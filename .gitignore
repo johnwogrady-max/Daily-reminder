@@ -2,6 +2,10 @@
 # send_push.js. It is NEVER committed to the public repo — the body
 # travels to the iPhone only inside the encrypted push payload.
 _briefing.json
+_news.json
+
+# Seen-item fingerprints for the APAC news briefing (Actions cache only).
+.cache/
 
 # Local OAuth client secret used by scripts/get_refresh_token.py.
 client_secret.json

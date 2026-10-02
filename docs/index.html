@@ -18,13 +18,17 @@
     <header>
       <h1>Daily Briefing</h1>
       <p id="generated" class="meta"></p>
+      <nav class="tabs">
+        <button class="tab" data-view="daily">Morning</button>
+        <button class="tab" data-view="news">APAC</button>
+      </nav>
     </header>
 
     <pre id="briefing">Loading…</pre>
 
     <section id="setup" hidden>
       <h2>Notifications</h2>
-      <p class="hint">Tap to receive your 7am briefing as a push notification.</p>
+      <p class="hint">Tap to receive your 7am and 8am briefings as push notifications.</p>
       <button id="enable-btn">Enable notifications</button>
       <div id="sub-wrap" hidden>
         <p class="hint">Copy this and paste it into the <code>PUSH_SUBSCRIPTION</code> GitHub secret:</p>

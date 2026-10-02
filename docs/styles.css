@@ -128,3 +128,23 @@ input[type="password"] {
   margin-left: 8px;
   vertical-align: middle;
 }
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.tabs .tab {
+  margin: 0;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid #2a3a55;
+  padding: 8px 16px;
+}
+
+.tabs .tab.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}

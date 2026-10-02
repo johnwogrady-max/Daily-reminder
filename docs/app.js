@@ -1,6 +1,10 @@
 const VAPID_PUBLIC_KEY = "BEdVpuEowSmtY-4vciGaidhIUR44Lad1k2lzM-uwTacvM54ZTszzxLbswpyaJCRoKGC_fZIbySzTvS2tXM1h4y0";
 const GITHUB_REPO = "johnwogrady-max/Daily-reminder";
-const WORKFLOW_FILE = "daily-alert.yml";
+const VIEWS = {
+  daily: { key: "./cached-briefing.json", workflow: "daily-alert.yml", waiting: "Waiting for the next 7am push." },
+  news: { key: "./cached-news.json", workflow: "apac-news.yml", waiting: "Waiting for the next 8am APAC push." },
+};
+let currentView = new URLSearchParams(location.search).get("view") === "news" ? "news" : "daily";
 
 function urlBase64ToUint8Array(base64) {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
@@ -21,8 +25,12 @@ async function loadBriefing() {
   // The real briefing is delivered via encrypted web push and stashed in
   // the local cache by the service worker. The public site hosts only a
   // placeholder.
+  const view = VIEWS[currentView];
+  document.querySelectorAll(".tab").forEach((t) =>
+    t.classList.toggle("active", t.dataset.view === currentView)
+  );
   try {
-    const cached = await caches.match("./cached-briefing.json");
+    const cached = await caches.match(view.key);
     if (cached) {
       const data = await cached.json();
       el.textContent = (data.body || "").trim() || "No briefing yet.";
@@ -35,12 +43,18 @@ async function loadBriefing() {
     // fall through to placeholder
   }
 
+  if (currentView !== "daily") {
+    el.textContent = "No APAC briefing yet.";
+    meta.textContent = view.waiting;
+    return;
+  }
+
   try {
     const res = await fetch("./briefing.json?_=" + Date.now(), { cache: "no-cache" });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
     el.textContent = (data.body || "").trim() || "No briefing yet.";
-    meta.textContent = "Waiting for the next 7am push.";
+    meta.textContent = view.waiting;
   } catch (e) {
     el.textContent = "Couldn't load briefing. " + e.message;
   }
@@ -126,7 +140,7 @@ async function triggerRun() {
   btn.disabled = true;
   try {
     const res = await fetch(
-      `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${WORKFLOW_FILE}/dispatches`,
+      `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${VIEWS[currentView].workflow}/dispatches`,
       {
         method: "POST",
         headers: {
@@ -159,6 +173,13 @@ document.getElementById("copy-btn").addEventListener("click", copySub);
 document.getElementById("pat-save-btn").addEventListener("click", savePat);
 document.getElementById("run-now-btn").addEventListener("click", triggerRun);
 document.getElementById("refresh-btn").addEventListener("click", loadBriefing);
+document.querySelectorAll(".tab").forEach((t) =>
+  t.addEventListener("click", () => {
+    currentView = t.dataset.view;
+    history.replaceState(null, "", currentView === "daily" ? "./" : "./?view=" + currentView);
+    loadBriefing();
+  })
+);
 document.getElementById("setup-toggle").addEventListener("click", () => {
   const s = document.getElementById("setup");
   s.hidden = !s.hidden;

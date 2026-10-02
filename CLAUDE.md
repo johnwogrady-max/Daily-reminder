@@ -47,6 +47,18 @@ The repo can be public without leaking briefing content. The real body never liv
 - `docs/briefing.json` is a generic placeholder shown if the PWA is opened before any push has landed (or on a different device).
 - Notification preview on the lock screen shows the umbrella headline only. iOS Settings → Notifications → Briefing → Show Previews → "When Unlocked" hides even that until the phone is unlocked.
 
+## APAC daily news (second, independent pipeline)
+
+`.github/workflows/apac-news.yml` runs `scripts/apac_news.py` at **8am** Melbourne (crons `21:00` + `22:00` UTC, hour gate `RUN_HOUR = 8`). It is a news briefing on Melbourne Airport / APAC and its shareholders (Dexus, IFM, Future Fund, TCorp, Morrison) written for APAC's General Counsel & Company Secretary. It does not touch the morning briefing.
+
+- **Coverage lives in `config/apac_news.yml`** (entities + alternate names, priority topics, Google News queries, ASX codes, optional Gmail label). Change coverage there, not in code.
+- **Sources**: Google News RSS per query (incl. `site:afr.com` / `site:theaustralian.com.au` for paywalled headlines), Google Alerts RSS feeds from the `NEWS_ALERT_FEEDS` secret (whitespace-separated URLs), ASX announcements, and newsletters under the Gmail label (skipped if the label doesn't exist). Every collector fails soft.
+- **Dedupe**: items outside `lookback_hours` are dropped; title fingerprints of reported items are kept in `.cache/apac_seen.json`, persisted via `actions/cache` (never committed — keeps `contents: read`).
+- **Two models**: `claude-haiku-4-5` filters for relevance and tags priority topics; `claude-sonnet-5-5` writes the briefing citing item ids like `[12]`.
+- **Citation guard**: `resolve_citations()` replaces ids with `(Source, date)` and drops any line citing an id not in the fetched set, plus its `→` line. Don't remove this — it is the main defence against invented stories. Links are deliberately not included: Google News URLs would blow the ~2.8 KB push budget.
+- **Output**: `_news.json` (gitignored) → `send_push.js` with `BRIEFING_FILE=_news.json PUSH_KIND=news PUSH_TITLE="APAC daily"`. The service worker stores each kind under its own key (`cached-briefing.json` / `cached-news.json`) in the `briefing-data` cache; the PWA has Morning / APAC tabs and opens `?view=news` from the APAC notification.
+- **Dry run**: `workflow_dispatch` input `dry_run` prints kept items and the briefing to the log without pushing or updating the seen list. Newsletter bodies are never printed.
+
 ## Commands
 
 ```bash

@@ -1,0 +1,87 @@
+# APAC daily news briefing — what to watch.
+#
+# Edit this file to change coverage. No code changes needed.
+# Read by scripts/apac_news.py.
+
+# Who the briefing is written for. Shapes the "why it matters" lines.
+reader: >-
+  General Counsel and Company Secretary of Australia Pacific Airports
+  Corporation (APAC), owner of Melbourne Airport and Launceston Airport.
+
+# Organisations to track. `names` are alternate names the filter treats as
+# the same entity.
+entities:
+  - key: airport
+    label: Melbourne Airport / APAC
+    names: ["Melbourne Airport", "Tullamarine", "Australia Pacific Airports",
+            "APAC", "APAM", "Launceston Airport"]
+  - key: dexus
+    label: Dexus (~27%)
+    names: ["Dexus"]
+  - key: ifm
+    label: IFM Investors (~25%)
+    names: ["IFM Investors", "IFM"]
+  - key: future_fund
+    label: Future Fund (~20%)
+    names: ["Future Fund"]
+  - key: tcorp
+    label: TCorp / SAS Trustee Corporation (~18%)
+    names: ["TCorp", "NSW Treasury Corporation", "SAS Trustee Corporation", "State Super"]
+  - key: morrison
+    label: Morrison / Utilities of Australia (~9%)
+    names: ["Morrison & Co", "Morrison", "HRL Morrison", "Utilities of Australia", "Infratil"]
+
+# Always included and flagged, however minor.
+priority_topics:
+  - key: dexus_litigation
+    label: Dexus litigation
+    description: >-
+      Any court, tribunal, appeal or regulator matter involving Dexus or its
+      funds, including Dexus v Australia Pacific Airports, the default
+      notice, the forced sale of its APAC stake, Project Mercury, and any
+      bidders or sale process for that stake.
+  - key: third_runway
+    label: Third runway
+    description: >-
+      Melbourne Airport's third runway: approvals, major development plan,
+      environmental assessment, airspace and flight paths, noise, community
+      opposition, legal challenges, construction and contracts.
+  - key: airport_rail
+    label: Airport rail
+    description: >-
+      Melbourne Airport Rail / SRL Airport: funding, station design and
+      location, Victorian and federal decisions, timing, and disputes
+      between the parties.
+
+# Google News searches. Each runs over the last ~2 days.
+# site: limits a search to one publisher (headline + snippet only for
+# paywalled sites).
+news_queries:
+  - '"Melbourne Airport"'
+  - '"Australia Pacific Airports"'
+  - '"Launceston Airport"'
+  - 'Dexus airport'
+  - 'Dexus court OR lawsuit OR appeal OR "class action"'
+  - '"IFM Investors"'
+  - '"Future Fund" infrastructure OR airport'
+  - 'TCorp OR "NSW Treasury Corporation"'
+  - '"Morrison & Co" OR Infratil'
+  - '"third runway" Melbourne'
+  - '"airport rail" Melbourne OR "SRL Airport"'
+  - 'ACCC airport monitoring OR "airports act"'
+  - '"Melbourne Airport" site:afr.com'
+  - 'Dexus site:afr.com'
+  - '"IFM Investors" site:afr.com'
+  - '"Melbourne Airport" site:theaustralian.com.au'
+  - 'Dexus site:theaustralian.com.au'
+
+# Optional: Gmail label holding newsletters (e.g. The Australian business
+# emails). Skipped if the label doesn't exist.
+gmail_label: "News/APAC"
+
+# ASX codes to pull company announcements for.
+asx_codes: ["DXS"]
+
+# How far back to look, in hours. Anything already reported in an earlier
+# run is skipped regardless.
+lookback_hours: 36
